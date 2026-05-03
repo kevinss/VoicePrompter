@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no">
+<title>VoicePrompter</title>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{--bg:#0a0a14;--surface:#1a1a2e;--surface2:#24243a;--text:#f0f0f5;--text2:#9494b8;--text3:#6b6b8d;--accent:#6366f1;--voice:#22d3ee;--success:#34d399;--warn:#fbbf24;--error:#ef4444;--radius:12px}
+html,body{height:100%;overflow:hidden;font-family:-apple-system,'PingFang SC','Helvetica Neue',sans-serif;background:var(--bg);color:var(--text);-webkit-font-smoothing:antialiased}
+#app{height:100%;display:flex;flex-direction:column}
+button{background:none;border:none;color:inherit;cursor:pointer;font:inherit}
+textarea{font:inherit;color:inherit;border:none;outline:none;background:transparent;resize:none}
+#editScreen{display:flex;flex-direction:column;height:100%;padding:12px}
+#editScreen.hidden{display:none}
+.edit-header{display:flex;justify-content:space-between;align-items:center;padding:8px 4px 12px}
+.edit-header h1{font-size:20px;font-weight:700;background:linear-gradient(135deg,var(--accent),var(--voice));-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+.edit-actions{display:flex;gap:8px}
+.edit-actions button{width:40px;height:40px;border-radius:50%;background:var(--surface2);display:flex;align-items:center;justify-content:center;font-size:18px}
+.script-name-bar{display:flex;gap:8px;margin-bottom:8px}
+.script-name-bar input{flex:1;background:var(--surface);padding:10px 14px;border-radius:8px;font-size:14px;color:var(--text)}
+.script-name-bar input::placeholder{color:var(--text3)}
+.script-name-bar select{background:var(--surface);color:var(--text2);padding:10px 12px;border-radius:8px;font-size:13px;border:none}
+.edit-textarea-wrap{flex:1;margin-bottom:12px}
+.edit-textarea-wrap textarea{width:100%;height:100%;background:var(--surface);border-radius:var(--radius);padding:16px;font-size:15px;line-height:1.7;color:var(--text)}
+.edit-bottom{display:flex;gap:10px;align-items:center}
+.voice-badge{display:flex;align-items:center;gap:6px;padding:8px 14px;border-radius:20px;font-size:13px;background:var(--surface2);color:var(--text2);cursor:pointer}
+.voice-badge.active{background:rgba(34,211,238,.15);color:var(--voice)}
+.voice-badge .dot{width:8px;height:8px;border-radius:50%;background:var(--text3);transition:all .3s}
+.voice-badge.active .dot{background:var(--voice);animation:pulse 1s infinite}
+.btn-start{flex:1;padding:14px;border-radius:var(--radius);background:linear-gradient(135deg,var(--accent),#7c3aed);font-size:16px;font-weight:600;text-align:center;box-shadow:0 4px 16px rgba(99,102,241,.3)}
+#presentScreen{display:none;flex-direction:column;height:100%;position:relative}
+#presentScreen.active{display:flex}
+.prompter-viewport{flex:1;position:relative;overflow:hidden;padding:30% 0 40%;mask-image:linear-gradient(to bottom,transparent 0,transparent 25px,black 35%,black 70%,transparent 85%,transparent 100%)}
+.prompter-viewport.mirror{transform:scaleX(-1)}
+.prompter-text{position:absolute;left:16px;right:16px;top:0;font-size:var(--size,36px);line-height:var(--lh,1.6);color:#f0f0f5;white-space:pre-wrap;word-break:break-word;padding:0 8px}
+.progress-bar{position:absolute;top:0;left:0;right:0;height:3px;z-index:10;background:var(--surface2)}
+.progress-bar-fill{height:100%;background:linear-gradient(90deg,var(--accent),var(--voice));width:0%;transition:width .2s}
+.overlay{position:absolute;left:0;right:0;z-index:20;transition:opacity .4s;opacity:0;pointer-events:none}
+.overlay.visible{opacity:1;pointer-events:auto}
+.overlay-top{top:0;padding:8px 12px 20px;background:linear-gradient(rgba(10,10,20,.95) 30%,transparent)}
+.overlay-bot{bottom:0;padding:16px;background:linear-gradient(transparent,rgba(10,10,20,.95) 30%)}
+.overlay .bar{display:flex;align-items:center;justify-content:space-between}
+.overlay .bar button{width:40px;height:40px;border-radius:50%;background:var(--surface2);display:flex;align-items:center;justify-content:center;font-size:18px}
+.ctrl-row{display:flex;align-items:center;gap:12px;margin-bottom:8px}
+.play-btn{width:52px;height:52px;border-radius:50%;background:var(--accent);display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0;box-shadow:0 4px 16px rgba(99,102,241,.3)}
+.play-btn.paused{background:var(--surface2)}
+.speed-display{flex:1}
+.speed-display .label{font-size:11px;color:var(--text3)}
+.speed-display .value{font-size:24px;font-weight:700}
+.speed-bar{height:4px;background:var(--surface2);border-radius:4px;overflow:hidden;margin-top:4px}
+.speed-bar-fill{height:100%;border-radius:4px;background:linear-gradient(90deg,var(--accent),var(--voice));transition:width .15s}
+.speech-echo{position:absolute;bottom:90px;left:16px;right:16px;z-index:15;text-align:center;pointer-events:none;opacity:0;transition:opacity .3s}
+.speech-echo div{display:inline-block;background:rgba(99,102,241,.25);border-radius:8px;padding:6px 14px;font-size:13px;color:var(--voice);max-width:90%;word-break:break-word}
+.vi{display:flex;align-items:center;gap:8px;padding:6px 14px;border-radius:20px;background:var(--surface2);font-size:12px;color:var(--text2);flex-shrink:0}
+.vi.active{background:rgba(34,211,238,.15)}
+.vi .wave{display:flex;align-items:center;gap:2px;height:20px}
+.vi .wave span{width:3px;border-radius:2px;background:var(--text3);height:4px}
+.vi.active .wave span{background:var(--voice);animation:wave .8s infinite alternate}
+.vi.active .wave span:nth-child(2){animation-delay:.1s}
+.vi.active .wave span:nth-child(3){animation-delay:.2s}
+.slider-row{display:flex;align-items:center;gap:12px;margin-top:4px}
+.slider-row input[type=range]{-webkit-appearance:none;flex:1;height:4px;border-radius:4px;background:var(--surface2);outline:none}
+.slider-row input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:20px;height:20px;border-radius:50%;background:var(--accent);cursor:pointer;box-shadow:0 2px 8px rgba(99,102,241,.3)}
+.badges{display:flex;gap:6px;flex-wrap:wrap}
+.badges button{padding:6px 14px;border-radius:16px;font-size:12px;background:var(--surface2);color:var(--text2)}
+.badges button.active{background:var(--accent);color:#fff}
+.speed-slow{color:#fbbf24}.speed-normal{color:#34d399}.speed-fast{color:#60a5fa}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+@keyframes wave{0%{height:4px}100%{height:16px}}
+</style>
+</head>
+<body>
+<div id="app">
+<div id="editScreen">
+<div class="edit-header"><div><h1>VoicePrompter</h1></div><div class="edit-actions"><button id="btnNewScript">+</button><button id="btnSettings" onclick="UI.showSettings()">&#9881;</button></div></div>
+<div class="script-name-bar"><input type="text" id="scriptName" placeholder="脚本名称..." value="未命名脚本"><select id="scriptSelect" onchange="ScriptStore.load(this.value)"><option value="">📂 脚本</option></select></div>
+<div class="edit-textarea-wrap"><textarea id="scriptText" placeholder="粘贴你的讲稿...&#10;&#10;语音控制自动跟随你的语速。"></textarea></div>
+<div class="edit-bottom"><div class="voice-badge" id="voiceToggle" onclick="UI.toggleVoice()"><span class="dot" id="voiceDot"></span><span>语音</span></div><button class="btn-start" id="btnStart" onclick="UI.startPresent()">&#9654; 开始</button></div>
+</div>
+<div id="presentScreen">
+<div class="progress-bar"><div class="progress-bar-fill" id="progressFill"></div></div>
+<div class="overlay overlay-top" id="overlayTop"><div class="bar"><div><button onclick="UI.stopPresent()">&#8592;</button><button onclick="Teleprompter.resetScroll()">&#10548;</button></div><div><button onclick="UI.toggleMirror()">&#10697;</button><button onclick="UI.showSettings()">&#9881;</button></div></div></div>
+<div class="prompter-viewport" id="prompterViewport"><div class="prompter-text" id="prompterText"></div></div>
+<div class="speech-echo" id="speechEcho"><div></div></div>
+<div class="overlay overlay-bot" id="overlayBot">
+<div class="ctrl-row"><button class="play-btn paused" id="playBtn" onclick="Teleprompter.toggle()"><span id="playIcon">&#9654;</span></button><div class="speed-display"><div class="label">速度</div><div class="value" id="speedDisplay">0.0x</div><div class="speed-bar"><div class="speed-bar-fill" id="speedBarFill"></div></div></div><div class="vi" id="voiceIndicator"><div class="wave"><span></span><span></span><span></span></div><span id="voiceStatus">等待中</span></div></div>
+<div class="slider-row"><span>&#128027;</span><input type="range" id="speedSlider" min="0" max="200" value="80" oninput="Teleprompter.setBaseSpeed(this.value/100)"><span>&#128070;</span></div>
+<div class="badges"><button onclick="Teleprompter.setBaseSpeed(.3)">很慢</button><button onclick="Teleprompter.setBaseSpeed(.6)">慢速</button><button onclick="Teleprompter.setBaseSpeed(1)" class="active">正常</button><button onclick="Teleprompter.setBaseSpeed(1.5)">快速</button><button onclick="Teleprompter.setBaseSpeed(2)">很快</button></div>
+</div>
+</div>
+</div>
+<script>
+// 全局状态
+const C={base:1,minS:0,maxS:3};
+const S={presenting:false,playing:false,voiceOn:true,mirror:false,lang:'zh-CN',baseSpd:1,vSpd:0,tSpd:0,cSpd:0,fontPx:36,lh:1.6,sens:1,pos:0,vEver:false,vEnergy:0,vLast:0,scripts:{}};
+const $=id=>document.getElementById(id);
+const D={edit:$('editScreen'),prez:$('presentScreen'),txt:$('scriptText'),name:$('scriptName'),sel:$('scriptSelect'),pTxt:$('prompterText'),pVp:$('prompterViewport'),spdD:$('speedDisplay'),spdBF:$('speedBarFill'),spdSl:$('speedSlider'),playB:$('playBtn'),playI:$('playIcon'),progF:$('progressFill'),vInd:$('voiceIndicator'),vStat:$('voiceStatus'),vTog:$('voiceToggle'),vDot:$('voiceDot'),setO:$('settingsOverlay')};
+let raf=null,ovT=null,ovV=false;
+
+// 脚本存储
+const SS={k:'vp_scr',init(){try{const r=localStorage.getItem(this.k);if(r)S.scripts=JSON.parse(r)}catch(e){}this.upd()},save(){const n=D.name.value.trim()||'脚本',t=D.txt.value;if(!t.trim())return;S.scripts[n]={text:t,at:Date.now()};try{localStorage.setItem(this.k,JSON.stringify(S.scripts))}catch(e){}this.upd(n)},load(n){const s=S.scripts[n];if(!s)return;D.txt.value=s.text;D.name.value=n;this.upd(n);D.txt.dispatchEvent(new Event('input'))},del(n){delete S.scripts[n];try{localStorage.setItem(this.k,JSON.stringify(S.scripts))}catch(e){}this.upd()},upd(a){const s=D.sel;s.innerHTML='<option value="">📂 脚本</option>';Object.keys(S.scripts).sort().forEach(n=>{const o=document.createElement('option');o.value=n;o.textContent=n;s.appendChild(o)});if(a)s.value=a}};
+D.sel.addEventListener('change',function(){if(this.value)SS.load(this.value)});
+window.addEventListener('beforeunload',()=>{if(D.txt.value.trim())SS.save()});
+
+// 提词器引擎
+const TP={init(){D.pTxt.textContent=D.txt.value||'粘贴讲稿...';const px=S.fontPx,lh=S.lh;D.pTxt.style.setProperty('--size',px+'px');D.pTxt.style.setProperty('--lh',lh)},start(){this.init();S.pos=0;S.playing=true;S.cSpd=0;S.vSpd=0;S.tSpd=0;S.presenting=true;D.progF.style.width='0%';D.playB.className='play-btn';D.playI.textContent='⏸';D.spdSl.value=S.baseSpd*100;this.updSpd(0);this.loop();if(S.voiceOn)VC.start()},stop(){S.playing=false;S.presenting=false;if(raf){cancelAnimationFrame(raf);raf=null}VC.stop();S.pos=0;D.pTxt.style.transform='translateY(0)';D.progF.style.width='0%';D.playB.className='play-btn paused';D.playI.textContent='▶';this.updSpd(0)},reset(){S.pos=0;D.pTxt.style.transform='translateY(0)';D.progF.style.width='0%'},toggle(){if(!S.presenting)return;S.playing=!S.playing;if(S.playing){D.playB.className='play-btn';D.playI.textContent='⏸';this.loop();if(S.voiceOn)VC.resume()}else{D.playB.className='play-btn paused';D.playI.textContent='▶';if(raf){cancelAnimationFrame(raf);raf=null}VC.pause()}},setSpd(s){S.baseSpd=Math.max(.1,Math.min(3,s));D.spdSl.value=S.baseSpd*100},loop(){if(raf)return;const step=()=>{if(!S.playing||!S.presenting){raf=requestAnimationFrame(step);return}this.upd();raf=requestAnimationFrame(step)};raf=requestAnimationFrame(step)},upd(){if(S.voiceOn){const e=S.vEnergy||0,now=Date.now(),la=S.vLast||0,si=la>0?now-la:99999;if(e>.04&&si<2500){S.vSpd=Math.max(.3,Math.min(2.5,e*6))*S.sens;S.tSpd=S.vSpd}else if(la>0&&si<3000){const d=Math.max(0,1-(si-800)/1500);S.tSpd=S.vSpd*d*.5}else{S.tSpd=0;S.vSpd=0}}else S.tSpd=S.baseSpd;S.tSpd=Math.max(0,Math.min(3,S.tSpd));S.cSpd+=(S.tSpd-S.cSpd)*(S.vEnergy>.04?.3:.03);S.pos+=S.cSpd*1.2;const mx=D.pTxt.scrollHeight-D.pVp.clientHeight;if(S.pos>=mx&&mx>0)S.pos=mx;if(S.pos<0)S.pos=0;D.pTxt.style.transform=`translateY(${-S.pos}px)`;D.progF.style.width=(mx>0?Math.min(100,S.pos/mx*100):0)+'%';this.updSpd(S.cSpd)},updSpd(spd){const vm=S.voiceOn,vr=VC.running,en=S.vEnergy||0,la=S.vLast||0,si=la>0?Date.now()-la:99999;if(vm&&spd<.01&&vr&&!la){D.spdD.textContent='等待～';D.spdD.className='value speed-slow'}else if(vm&&spd<.01&&la>0&&si<3000){D.spdD.textContent='继续～';D.spdD.className='value speed-slow'}else if(vm&&spd<.01&&la>0){D.spdD.textContent='⏸';D.spdD.className='value speed-slow'}else{D.spdD.textContent=spd.toFixed(1)+'x';D.spdD.className='value'+(spd<.3?' speed-slow':spd<.8?'':spd<1.5?' speed-normal':' speed-fast')}D.spdBF.style.width=(vm&&spd<.01?0:Math.min(100,spd/3*100))+'%';const vi=D.vInd;if(!vm){vi.className='vi';D.vStat.textContent='关闭'}else if(!vr){vi.className='vi';D.vStat.textContent='启动...'}else if(en>.05){vi.className='vi active';D.vStat.textContent='朗读中'}else if(la>0&&si<2000){vi.className='vi';D.vStat.textContent='听...'}else if(la>0){vi.className='vi';D.vStat.textContent='暂停'}else{vi.className='vi';D.vStat.textContent='等待...'}}};
+
+// 原生桥接回调
+window._nrg=0;window._nla=0;window._nPerm=false;
+function onNativePermissionResult(g){window._nPerm=g;if(VC&&VC._onPerm)VC._onPerm(g)}
+function onSpeechBegin(){window._nla=Date.now();window._nrg=.3}
+function onSpeechEnd(){window._nrg=0}
+function onSpeechResult(t){window._nla=Date.now();window._nrg=.5;try{const e=document.querySelector('.speech-echo div');if(e&&t){e.textContent=t;document.getElementById('speechEcho').style.opacity='1';clearTimeout(window._et);window._et=setTimeout(()=>document.getElementById('speechEcho').style.opacity='0',2000)}}catch(e){}}
+function onSpeechPartial(t){window._nla=Date.now();window._nrg=.3;try{const e=document.querySelector('.speech-echo div');if(e&&t){e.textContent=t+'...';document.getElementById('speechEcho').style.opacity='1'}}catch(e){}}
+function onSpeechError(m){D.vStat.textContent='错误: '+m}
+
+// 语音控制器
+const VC={audioCtx:null,analyser:null,dataArr:null,source:null,stream:null,running:false,lastAct:0,supported:false,granted:false,useNative:false,_timer:null,_e:0,_nf:.02,_at:.35,_rl:.015,_thr:0,_permR:null,init(){if(window.NativeSpeech){this.useNative=true;this.supported=true;this.granted=window._nPerm;try{NativeSpeech.initRecognizer()}catch(e){}return}if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){this.supported=false;return}const AC=window.AudioContext||window.webkitAudioContext;if(!AC){this.supported=false;return}this.supported=true},_onPerm(g){this.granted=g;if(this._permR){this._permR(g);this._permR=null}D.vDot.style.background=g?'var(--success)':'var(--error)'},async reqPerm(){if(this.granted)return true;if(this.useNative){return new Promise(r=>{this._permR=r})}if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia)return false;try{const s=await navigator.mediaDevices.getUserMedia({audio:true});this.granted=true;this.stream=s;D.vDot.style.background='var(--success)';return true}catch(err){this.granted=false;D.vDot.style.background='var(--error)';return false}},async start(){if(!this.supported||!S.voiceOn||this.running)return;if(!this.granted&&!await this.reqPerm())return;try{if(this.useNative){NativeSpeech.startVAD();NativeSpeech.startListening();this.running=true;this._e=0;this.lastAct=0;D.vDot.className='dot';D.vDot.style.background='';this._pollNative();return}const AC=window.AudioContext||window.webkitAudioContext;this.audioCtx=new AC();this.source=this.audioCtx.createMediaStreamSource(this.stream);this.analyser=this.audioCtx.createAnalyser();this.analyser.fftSize=256;this.source.connect(this.analyser);this.dataArr=new Uint8Array(this.analyser.frequencyBinCount);this.running=true;this._e=0;this._nf=.02;this._poll()&&console.log('VAD started')}catch(e){console.warn('start failed:',e)}},_pollNative(){if(this._timer)clearInterval(this._timer);this._timer=setInterval(()=>{if(!this.running){clearInterval(this._timer);return}const e=window._nrg||0,la=window._nla||0;this._e+=(e-this._e)*.3;this.lastAct=la;S.vEnergy=this._e;S.vLast=la;if(this._e>.05&&!S.vEver){S.vEver=true;S.cSpd=.6}},_poll(){if(this._timer)clearInterval(this._timer);this._timer=setInterval(()=>{if(!this.running){clearInterval(this._timer);return}this.analyser.getByteFrequencyData(this.dataArr);let s=0;for(let i=0;i<this.dataArr.length;i++)s+=this.dataArr[i]*this.dataArr[i];const rms=Math.sqrt(s/this.dataArr.length),raw=Math.min(1,rms/128);if(!(raw>this._thr&&raw>.03))this._nf+=(raw-this._nf)*.02;this._thr=Math.max(this._nf*2.5,.025);if(raw>this._thr){this._e+=(raw-this._e)*this._at;this.lastAct=Date.now()}else this._e*=(1-this._rl);S.vEnergy=this._e;S.vLast=this.lastAct;if(this._e>.05&&!S.vEver){S.vEver=true;S.cSpd=.6}},60)},stop(){this.running=false;S.vEver=false;if(this.useNative){try{NativeSpeech.stopListening()}catch(e){}try{NativeSpeech.stopVAD()}catch(e){}}if(this._timer){clearInterval(this._timer);this._timer=null}if(this.audioCtx){try{this.audioCtx.close()}catch(e){}this.audioCtx=null}this._e=0;S.vEnergy=0;S.vLast=0;this.lastAct=0;D.vDot.className='dot';D.vDot.style.background=''},pause(){this.running=false;if(this.useNative){try{NativeSpeech.stopListening()}catch(e){}}if(this._timer){clearInterval(this._timer);this._timer=null}},resume(){if(S.voiceOn&&this.supported)this.start()},chLang(){}};
+
+// UI
+const UI={init(){D.txt.addEventListener('input',()=>{});D.prez.addEventListener('click',e=>{if(!e.target.closest('.overlay'))UI.togO()});VC.init();document.getElementById('btnNewScript').addEventListener('click',()=>{if(D.txt.value.trim()&&!confirm('新建？'))return;D.txt.value='';D.name.value='新脚本'});document.addEventListener('keydown',e=>{if(e.key===' '){e.preventDefault();if(S.presenting)TP.toggle()}if(e.key==='Escape'&&S.presenting)UI.stop()})},toggleVoice(){S.voiceOn=!S.voiceOn;const el=D.vTog;if(S.voiceOn){el.classList.add('active');VC.reqPerm()}else{el.classList.remove('active')}if(S.presenting){S.voiceOn?VC.start():VC.stop()}},startP(){if(!D.txt.value.trim())return;SS.save();S.presenting=true;D.edit.classList.add('hidden');D.prez.classList.add('active');TP.init();TP.start()},stop(){TP.stop();S.presenting=false;D.edit.classList.remove('hidden');D.prez.classList.remove('active');VC.stop()},togO(){ovV?(ovV=false,D.overlayTop&&D.overlayTop.classList.remove('visible'),D.overlayBot&&D.overlayBot.classList.remove('visible')):(ovV=true,D.overlayTop&&D.overlayTop.classList.add('visible'),D.overlayBot&&D.overlayBot.classList.add('visible'))},showSettings(){}};
+
+// 初始化
+function init(){SS.init();UI.init();D.txt.dispatchEvent(new Event('input'));TP.setSpd(1);TP.init()}
+document.addEventListener('DOMContentLoaded',init);
+</script>
+</body>
+</html>
